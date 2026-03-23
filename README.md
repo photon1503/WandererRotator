@@ -8,8 +8,6 @@ Lightweight ASCOM `IRotatorV4` driver for WandererRotator hardware — built for
 |---|---|---|
 | **Footprint** | Thin ASCOM COM local-server — no UI process running during imaging | Full standalone application |
 | **Cable management** | Built-in: firmware angle is the no-wrap anchor, moves are routed the safe way | None — the user must track cable wrap manually |
-| **Live angle** | Continuously estimated position while a move is in progress | Angle updates only after the move completes |
-| **Multi-client** | COM local-server, shared by every ASCOM client simultaneously | Single-application access |
 | **Auto-correction** | Up to 3 automatic retries when the device stops short of the target | Manual re-slew required |
 
 ## Features
