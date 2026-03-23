@@ -43,20 +43,22 @@ namespace ASCOM.photonWanderer.Rotator
             this.numericCompletionCorrectionThreshold = new System.Windows.Forms.NumericUpDown();
             this.label5 = new System.Windows.Forms.Label();
             this.numericDefaultMotionRate = new System.Windows.Forms.NumericUpDown();
+            this.label7 = new System.Windows.Forms.Label();
+            this.numericVirtualMechanicalPosition = new System.Windows.Forms.NumericUpDown();
             this.label6 = new System.Windows.Forms.Label();
             this.textMeasuredDegreesPerSecond = new System.Windows.Forms.TextBox();
-            this.buttonSetZero = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.picASCOM)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericBacklash)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericCompletionCorrectionThreshold)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericDefaultMotionRate)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.numericVirtualMechanicalPosition)).BeginInit();
             this.SuspendLayout();
             // 
             // cmdOK
             // 
             this.cmdOK.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.cmdOK.DialogResult = System.Windows.Forms.DialogResult.OK;
-            this.cmdOK.Location = new System.Drawing.Point(281, 257);
+            this.cmdOK.Location = new System.Drawing.Point(281, 279);
             this.cmdOK.Name = "cmdOK";
             this.cmdOK.Size = new System.Drawing.Size(59, 24);
             this.cmdOK.TabIndex = 0;
@@ -68,7 +70,7 @@ namespace ASCOM.photonWanderer.Rotator
             // 
             this.cmdCancel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.cmdCancel.DialogResult = System.Windows.Forms.DialogResult.Cancel;
-            this.cmdCancel.Location = new System.Drawing.Point(281, 287);
+            this.cmdCancel.Location = new System.Drawing.Point(281, 309);
             this.cmdCancel.Name = "cmdCancel";
             this.cmdCancel.Size = new System.Drawing.Size(59, 25);
             this.cmdCancel.TabIndex = 1;
@@ -111,7 +113,7 @@ namespace ASCOM.photonWanderer.Rotator
             // 
             this.chkTrace.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.chkTrace.AutoSize = true;
-            this.chkTrace.Location = new System.Drawing.Point(16, 306);
+            this.chkTrace.Location = new System.Drawing.Point(16, 328);
             this.chkTrace.Name = "chkTrace";
             this.chkTrace.Size = new System.Drawing.Size(69, 17);
             this.chkTrace.TabIndex = 6;
@@ -232,46 +234,64 @@ namespace ASCOM.photonWanderer.Rotator
             0,
             65536});
             // 
+            // label7
+            // 
+            this.label7.AutoSize = true;
+            this.label7.Location = new System.Drawing.Point(12, 210);
+            this.label7.Name = "label7";
+            this.label7.Size = new System.Drawing.Size(117, 13);
+            this.label7.TabIndex = 15;
+            this.label7.Text = "Virtual mechanical pos";
+            // 
+            // numericVirtualMechanicalPosition
+            // 
+            this.numericVirtualMechanicalPosition.DecimalPlaces = 3;
+            this.numericVirtualMechanicalPosition.Increment = new decimal(new int[] {
+            1,
+            0,
+            0,
+            65536});
+            this.numericVirtualMechanicalPosition.Location = new System.Drawing.Point(136, 208);
+            this.numericVirtualMechanicalPosition.Maximum = new decimal(new int[] {
+            359999,
+            0,
+            0,
+            196608});
+            this.numericVirtualMechanicalPosition.Name = "numericVirtualMechanicalPosition";
+            this.numericVirtualMechanicalPosition.Size = new System.Drawing.Size(71, 20);
+            this.numericVirtualMechanicalPosition.TabIndex = 16;
+            // 
             // label6
             // 
             this.label6.AutoSize = true;
-            this.label6.Location = new System.Drawing.Point(12, 211);
+            this.label6.Location = new System.Drawing.Point(12, 237);
             this.label6.Name = "label6";
             this.label6.Size = new System.Drawing.Size(103, 13);
-            this.label6.TabIndex = 15;
+            this.label6.TabIndex = 17;
             this.label6.Text = "Measured deg / sec";
             // 
             // textMeasuredDegreesPerSecond
             // 
-            this.textMeasuredDegreesPerSecond.Location = new System.Drawing.Point(118, 208);
+            this.textMeasuredDegreesPerSecond.Location = new System.Drawing.Point(118, 234);
             this.textMeasuredDegreesPerSecond.Name = "textMeasuredDegreesPerSecond";
             this.textMeasuredDegreesPerSecond.ReadOnly = true;
             this.textMeasuredDegreesPerSecond.Size = new System.Drawing.Size(89, 20);
-            this.textMeasuredDegreesPerSecond.TabIndex = 16;
+            this.textMeasuredDegreesPerSecond.TabIndex = 18;
             this.textMeasuredDegreesPerSecond.TabStop = false;
-            // 
-            // buttonSetZero
-            // 
-            this.buttonSetZero.Location = new System.Drawing.Point(77, 234);
-            this.buttonSetZero.Name = "buttonSetZero";
-            this.buttonSetZero.Size = new System.Drawing.Size(130, 24);
-            this.buttonSetZero.TabIndex = 17;
-            this.buttonSetZero.Text = "Set Current To Zero";
-            this.buttonSetZero.UseVisualStyleBackColor = true;
-            this.buttonSetZero.Click += new System.EventHandler(this.ButtonSetZero_Click);
             // 
             // SetupDialogForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(350, 330);
+            this.ClientSize = new System.Drawing.Size(350, 352);
             this.Controls.Add(this.textMeasuredDegreesPerSecond);
             this.Controls.Add(this.label6);
+            this.Controls.Add(this.numericVirtualMechanicalPosition);
+            this.Controls.Add(this.label7);
             this.Controls.Add(this.numericDefaultMotionRate);
             this.Controls.Add(this.label5);
             this.Controls.Add(this.numericCompletionCorrectionThreshold);
             this.Controls.Add(this.label4);
-            this.Controls.Add(this.buttonSetZero);
             this.Controls.Add(this.numericBacklash);
             this.Controls.Add(this.label3);
             this.Controls.Add(this.chkReverse);
@@ -294,6 +314,7 @@ namespace ASCOM.photonWanderer.Rotator
             ((System.ComponentModel.ISupportInitialize)(this.numericBacklash)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericCompletionCorrectionThreshold)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericDefaultMotionRate)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.numericVirtualMechanicalPosition)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -315,8 +336,9 @@ namespace ASCOM.photonWanderer.Rotator
         private System.Windows.Forms.NumericUpDown numericCompletionCorrectionThreshold;
         private System.Windows.Forms.Label label5;
         private System.Windows.Forms.NumericUpDown numericDefaultMotionRate;
+        private System.Windows.Forms.Label label7;
+        private System.Windows.Forms.NumericUpDown numericVirtualMechanicalPosition;
         private System.Windows.Forms.Label label6;
         private System.Windows.Forms.TextBox textMeasuredDegreesPerSecond;
-        private System.Windows.Forms.Button buttonSetZero;
     }
 }

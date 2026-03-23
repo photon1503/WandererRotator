@@ -43,6 +43,11 @@ namespace ASCOM.photonWanderer.Rotator
                     throw new InvalidOperationException("Default motion rate must be greater than 0.0 degrees per second.");
                 }
 
+                if (numericVirtualMechanicalPosition.Value < 0 || numericVirtualMechanicalPosition.Value >= 360)
+                {
+                    throw new InvalidOperationException("Virtual mechanical position must be between 0.0 and 359.999 degrees.");
+                }
+
                 tl.Enabled = chkTrace.Checked;
 
                 if (comboBoxComPort.SelectedItem is null)
@@ -63,11 +68,12 @@ namespace ASCOM.photonWanderer.Rotator
                 RotatorHardware.Backlash = (float)numericBacklash.Value;
                 RotatorHardware.CompletionCorrectionThresholdDegrees = (float)numericCompletionCorrectionThreshold.Value;
                 RotatorHardware.DefaultMotionRateDegreesPerSecond = (float)numericDefaultMotionRate.Value;
+                RotatorHardware.VirtualMechanicalPosition = (float)numericVirtualMechanicalPosition.Value;
                 RefreshMeasuredMotionRateDisplay();
 
                 tl.LogMessage(
                     "Setup OK",
-                    $"New configuration values - Reverse: {chkReverse.Checked}, Backlash: {numericBacklash.Value.ToString(CultureInfo.InvariantCulture)}, Correction threshold: {numericCompletionCorrectionThreshold.Value.ToString(CultureInfo.InvariantCulture)}, Default motion rate: {numericDefaultMotionRate.Value.ToString(CultureInfo.InvariantCulture)}, Measured motion rate: {textMeasuredDegreesPerSecond.Text}");
+                    $"New configuration values - Reverse: {chkReverse.Checked}, Backlash: {numericBacklash.Value.ToString(CultureInfo.InvariantCulture)}, Correction threshold: {numericCompletionCorrectionThreshold.Value.ToString(CultureInfo.InvariantCulture)}, Default motion rate: {numericDefaultMotionRate.Value.ToString(CultureInfo.InvariantCulture)}, Virtual mechanical position: {numericVirtualMechanicalPosition.Value.ToString(CultureInfo.InvariantCulture)}, Measured motion rate: {textMeasuredDegreesPerSecond.Text}");
             }
             catch (Exception ex)
             {
@@ -105,11 +111,12 @@ namespace ASCOM.photonWanderer.Rotator
             decimal backlash = Convert.ToDecimal(RotatorHardware.Backlash, CultureInfo.InvariantCulture);
             decimal correctionThreshold = Convert.ToDecimal(RotatorHardware.CompletionCorrectionThresholdDegrees, CultureInfo.InvariantCulture);
             decimal defaultMotionRate = Convert.ToDecimal(RotatorHardware.DefaultMotionRateDegreesPerSecond, CultureInfo.InvariantCulture);
+            decimal virtualMechanicalPosition = Convert.ToDecimal(RotatorHardware.VirtualMechanicalPosition, CultureInfo.InvariantCulture);
             numericBacklash.Value = Math.Min(numericBacklash.Maximum, Math.Max(numericBacklash.Minimum, backlash));
             numericCompletionCorrectionThreshold.Value = Math.Min(numericCompletionCorrectionThreshold.Maximum, Math.Max(numericCompletionCorrectionThreshold.Minimum, correctionThreshold));
             numericDefaultMotionRate.Value = Math.Min(numericDefaultMotionRate.Maximum, Math.Max(numericDefaultMotionRate.Minimum, defaultMotionRate));
+            numericVirtualMechanicalPosition.Value = Math.Min(numericVirtualMechanicalPosition.Maximum, Math.Max(numericVirtualMechanicalPosition.Minimum, virtualMechanicalPosition));
             RefreshMeasuredMotionRateDisplay();
-            buttonSetZero.Enabled = RotatorHardware.IsConnectedForSetup;
             comboBoxComPort.Enabled = !RotatorHardware.IsConnectedForSetup;
 
             comboBoxComPort.Items.Clear();
@@ -135,7 +142,7 @@ namespace ASCOM.photonWanderer.Rotator
 
             tl.LogMessage(
                 "InitUI",
-                $"Set UI controls to Trace: {chkTrace.Checked}, COM Port: {comboBoxComPort.SelectedItem}, Reverse: {chkReverse.Checked}, Backlash: {numericBacklash.Value}, Correction threshold: {numericCompletionCorrectionThreshold.Value}, Default motion rate: {numericDefaultMotionRate.Value}, Measured motion rate: {textMeasuredDegreesPerSecond.Text}");
+                $"Set UI controls to Trace: {chkTrace.Checked}, COM Port: {comboBoxComPort.SelectedItem}, Reverse: {chkReverse.Checked}, Backlash: {numericBacklash.Value}, Correction threshold: {numericCompletionCorrectionThreshold.Value}, Default motion rate: {numericDefaultMotionRate.Value}, Virtual mechanical position: {numericVirtualMechanicalPosition.Value}, Measured motion rate: {textMeasuredDegreesPerSecond.Text}");
         }
 
         private void RefreshMeasuredMotionRateDisplay()
@@ -154,19 +161,6 @@ namespace ASCOM.photonWanderer.Rotator
                 Focus();
                 BringToFront();
                 TopMost = false;
-            }
-        }
-
-        private void ButtonSetZero_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                RotatorHardware.SetMechanicalZero();
-                MessageBox.Show("The rotator mechanical position has been reset to zero.", "WandererRotator", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message, "Unable to set zero", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
     }

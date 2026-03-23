@@ -30,9 +30,10 @@ namespace ASCOM.photonWanderer.Rotator
         internal const string completionCorrectionThresholdDefault = "0.01";
         internal const string defaultMotionRateProfileName = "Default Motion Rate";
         internal const string defaultMotionRateDefault = "3.5";
+        internal const string virtualMechanicalPositionProfileName = "Virtual Mechanical Position";
+        internal const string virtualMechanicalPositionDefault = "0.0";
 
         private const string HandshakeCommand = "1500001";
-        private const string SetZeroCommand = "1500002";
         private const string StopCommand = "stop";
         private const string ReverseNormalCommand = "1700000";
         private const string ReverseReversedCommand = "1700001";
@@ -74,16 +75,19 @@ namespace ASCOM.photonWanderer.Rotator
         private static float backlashValue;
         private static string firmwareVersion = "Unknown";
         private static string deviceModel = "WanderRotator";
-        private static float mechanicalPosition;
+        private static float firmwareMechanicalPosition;
+        private static float virtualMechanicalPosition;
         private static float syncOffset;
         private static float targetPosition;
         private static bool isMoving;
         private static float completionCorrectionThresholdDegrees = 0.01f;
         private static float defaultMotionRateDegreesPerSecond = 3.5f;
         private static float estimatedDegreesPerSecond = 3.5f;
-        private static float activeMoveStartMechanicalPosition;
+        private static float activeMoveStartVirtualMechanicalPosition;
+        private static float activeMoveStartFirmwareMechanicalPosition;
         private static float activeMoveSignedDegrees;
-        private static float activeMoveTargetMechanicalPosition;
+        private static float activeMoveTargetVirtualMechanicalPosition;
+        private static float activeMoveTargetFirmwareMechanicalPosition;
         private static DateTime activeMoveStartUtc;
         private static bool waitingForCompletionFrame;
         private static Task activeMoveTask;
@@ -120,9 +124,9 @@ namespace ASCOM.photonWanderer.Rotator
                 connectedState = false;
                 utilities = new Util();
                 astroUtilities = new AstroUtils();
-                mechanicalPosition = 0.0f;
+                firmwareMechanicalPosition = 0.0f;
                 syncOffset = 0.0f;
-                targetPosition = 0.0f;
+                targetPosition = NormalizeAngle(virtualMechanicalPosition + syncOffset);
                 isMoving = false;
                 estimatedDegreesPerSecond = defaultMotionRateDegreesPerSecond;
 
@@ -402,8 +406,13 @@ namespace ASCOM.photonWanderer.Rotator
             CheckConnected("MoveAbsolute");
 
             float requestedTarget = NormalizeAngle(position);
-            float currentLogicalPosition = Position;
-            float deltaDegrees = requestedTarget - currentLogicalPosition;
+            float deltaDegrees;
+
+            lock (stateLock)
+            {
+                UpdateEstimatedMotionStateLocked();
+                deltaDegrees = ComputeCableSafeDeltaLocked(ConvertLogicalToVirtualMechanicalTargetLocked(requestedTarget));
+            }
 
             if (Math.Abs(deltaDegrees) < MinimumMoveDegrees)
             {
@@ -427,7 +436,7 @@ namespace ASCOM.photonWanderer.Rotator
                 lock (stateLock)
                 {
                     UpdateEstimatedMotionStateLocked();
-                    float position = NormalizeAngle(mechanicalPosition + syncOffset);
+                    float position = NormalizeAngle(virtualMechanicalPosition + syncOffset);
                     LogMessage("Position Get", position.ToString(CultureInfo.InvariantCulture));
                     return position;
                 }
@@ -479,7 +488,7 @@ namespace ASCOM.photonWanderer.Rotator
                 lock (stateLock)
                 {
                     UpdateEstimatedMotionStateLocked();
-                    float currentTarget = isMoving ? targetPosition : NormalizeAngle(mechanicalPosition + syncOffset);
+                    float currentTarget = isMoving ? targetPosition : NormalizeAngle(virtualMechanicalPosition + syncOffset);
                     LogMessage("TargetPosition Get", currentTarget.ToString(CultureInfo.InvariantCulture));
                     return currentTarget;
                 }
@@ -493,8 +502,8 @@ namespace ASCOM.photonWanderer.Rotator
                 lock (stateLock)
                 {
                     UpdateEstimatedMotionStateLocked();
-                    LogMessage("MechanicalPosition Get", mechanicalPosition.ToString(CultureInfo.InvariantCulture));
-                    return mechanicalPosition;
+                    LogMessage("MechanicalPosition Get", virtualMechanicalPosition.ToString(CultureInfo.InvariantCulture));
+                    return virtualMechanicalPosition;
                 }
             }
         }
@@ -504,15 +513,13 @@ namespace ASCOM.photonWanderer.Rotator
             CheckConnected("MoveMechanical");
 
             float requestedMechanicalPosition = NormalizeAngle(position);
-            float currentMechanicalPosition;
+            float deltaDegrees;
 
             lock (stateLock)
             {
                 UpdateEstimatedMotionStateLocked();
-                currentMechanicalPosition = mechanicalPosition;
+                deltaDegrees = ComputeCableSafeDeltaLocked(requestedMechanicalPosition);
             }
-
-            float deltaDegrees = requestedMechanicalPosition - currentMechanicalPosition;
 
             if (Math.Abs(deltaDegrees) < MinimumMoveDegrees)
             {
@@ -536,8 +543,8 @@ namespace ASCOM.photonWanderer.Rotator
             lock (stateLock)
             {
                 UpdateEstimatedMotionStateLocked();
-                syncOffset = NormalizeAngle(position - mechanicalPosition);
-                targetPosition = NormalizeAngle(mechanicalPosition + syncOffset);
+                syncOffset = NormalizeAngle(position - virtualMechanicalPosition);
+                targetPosition = NormalizeAngle(virtualMechanicalPosition + syncOffset);
                 LogMessage("Sync", $"Synced logical position to {position}, sync offset is now {syncOffset}");
             }
         }
@@ -646,20 +653,31 @@ namespace ASCOM.photonWanderer.Rotator
             }
         }
 
-        internal static void SetMechanicalZero()
+        internal static float VirtualMechanicalPosition
         {
-            CheckConnected("SetMechanicalZero");
-
-            StopActiveMoveInternal(true);
-            LogMessage("SetMechanicalZero", "Sending set-to-zero command.");
-            SendBlindCommand(SetZeroCommand, true);
-
-            lock (stateLock)
+            get
             {
-                UpdateEstimatedMotionStateLocked();
-                mechanicalPosition = 0.0f;
-                syncOffset = 0.0f;
-                targetPosition = 0.0f;
+                lock (stateLock)
+                {
+                    return virtualMechanicalPosition;
+                }
+            }
+            set
+            {
+                float normalizedValue = NormalizeAngle(value);
+
+                lock (stateLock)
+                {
+                    virtualMechanicalPosition = normalizedValue;
+
+                    if (!isMoving)
+                    {
+                        targetPosition = NormalizeAngle(virtualMechanicalPosition + syncOffset);
+                    }
+                }
+
+                PersistVirtualMechanicalPosition(normalizedValue);
+                LogMessage("VirtualMechanicalPosition Set", normalizedValue.ToString(CultureInfo.InvariantCulture));
             }
         }
 
@@ -706,6 +724,10 @@ namespace ASCOM.photonWanderer.Rotator
                     ParseFloat(
                         driverProfile.GetValue(DriverProgId, defaultMotionRateProfileName, string.Empty, defaultMotionRateDefault),
                         defaultMotionRateDefault));
+                virtualMechanicalPosition = NormalizeAngle(
+                    ParseFloat(
+                        driverProfile.GetValue(DriverProgId, virtualMechanicalPositionProfileName, string.Empty, virtualMechanicalPositionDefault),
+                        virtualMechanicalPositionDefault));
                 estimatedDegreesPerSecond = defaultMotionRateDegreesPerSecond;
             }
         }
@@ -721,6 +743,16 @@ namespace ASCOM.photonWanderer.Rotator
                 driverProfile.WriteValue(DriverProgId, backlashProfileName, backlashValue.ToString(CultureInfo.InvariantCulture));
                 driverProfile.WriteValue(DriverProgId, completionCorrectionThresholdProfileName, completionCorrectionThresholdDegrees.ToString(CultureInfo.InvariantCulture));
                 driverProfile.WriteValue(DriverProgId, defaultMotionRateProfileName, defaultMotionRateDegreesPerSecond.ToString(CultureInfo.InvariantCulture));
+                driverProfile.WriteValue(DriverProgId, virtualMechanicalPositionProfileName, virtualMechanicalPosition.ToString(CultureInfo.InvariantCulture));
+            }
+        }
+
+        private static void PersistVirtualMechanicalPosition(float value)
+        {
+            using (Profile driverProfile = new Profile())
+            {
+                driverProfile.DeviceType = "Rotator";
+                driverProfile.WriteValue(DriverProgId, virtualMechanicalPositionProfileName, value.ToString(CultureInfo.InvariantCulture));
             }
         }
 
@@ -778,15 +810,15 @@ namespace ASCOM.photonWanderer.Rotator
                     {
                         deviceModel = handshakeResult.Model;
                         firmwareVersion = handshakeResult.FirmwareVersion;
-                        mechanicalPosition = NormalizeAngle(handshakeResult.MechanicalDegrees);
+                        firmwareMechanicalPosition = NormalizeAngle(handshakeResult.MechanicalDegrees);
                         syncOffset = 0.0f;
-                        targetPosition = NormalizeAngle(mechanicalPosition + syncOffset);
+                        targetPosition = NormalizeAngle(virtualMechanicalPosition + syncOffset);
                         connectedState = true;
                     }
 
                     LogMessage(
                         "SetConnected",
-                        $"Handshake OK on attempt {attempt} of {MaximumConnectAttempts}. Model {handshakeResult.Model}, firmware {handshakeResult.FirmwareVersion}, mechanical {handshakeResult.MechanicalDegrees}, backlash {handshakeResult.BacklashDegrees}, reverse {handshakeResult.Reverse}");
+                        $"Handshake OK on attempt {attempt} of {MaximumConnectAttempts}. Model {handshakeResult.Model}, firmware {handshakeResult.FirmwareVersion}, firmware mechanical {handshakeResult.MechanicalDegrees}, virtual mechanical {virtualMechanicalPosition}, backlash {handshakeResult.BacklashDegrees}, reverse {handshakeResult.Reverse}");
 
                     if (Math.Abs(handshakeResult.BacklashDegrees - Backlash) > 0.001f)
                     {
@@ -824,7 +856,7 @@ namespace ASCOM.photonWanderer.Rotator
             {
                 connectedState = false;
                 isMoving = false;
-                targetPosition = NormalizeAngle(mechanicalPosition + syncOffset);
+                targetPosition = NormalizeAngle(virtualMechanicalPosition + syncOffset);
                 ResetActiveMoveEstimateLocked();
             }
 
@@ -923,7 +955,7 @@ namespace ASCOM.photonWanderer.Rotator
                 lock (stateLock)
                 {
                     isMoving = false;
-                    targetPosition = NormalizeAngle(mechanicalPosition + syncOffset);
+                    targetPosition = NormalizeAngle(virtualMechanicalPosition + syncOffset);
                     moveCancellation = null;
                     ResetActiveMoveEstimateLocked();
                 }
@@ -955,14 +987,17 @@ namespace ASCOM.photonWanderer.Rotator
                     lock (stateLock)
                     {
                         UpdateEstimatedMotionStateLocked(completedUtc);
-                        mechanicalPosition = NormalizeAngle(moveCompletion.MechanicalDegrees);
-                        currentLogicalPosition = NormalizeAngle(mechanicalPosition + syncOffset);
+                        float completedFirmwareMechanicalPosition = NormalizeAngle(moveCompletion.MechanicalDegrees);
+                        float completedDeltaDegrees = completedFirmwareMechanicalPosition - firmwareMechanicalPosition;
+                        firmwareMechanicalPosition = completedFirmwareMechanicalPosition;
+                        virtualMechanicalPosition = NormalizeAngle(virtualMechanicalPosition + completedDeltaDegrees);
+                        currentLogicalPosition = NormalizeAngle(virtualMechanicalPosition + syncOffset);
                         correctionError = AbsoluteAngularDifference(currentLogicalPosition, requestedLogicalTarget);
                         UpdateEstimatedRateFromCompletedMoveLocked(Math.Abs(currentSegmentDelta), completedUtc);
 
                         if (correctionAttempt < MaximumCorrectionAttempts && correctionError > completionCorrectionThresholdDegrees)
                         {
-                            correctionDelta = ComputeDirectedDelta(currentLogicalPosition, requestedLogicalTarget, currentSegmentDelta);
+                            correctionDelta = ComputeCableSafeDeltaLocked(ConvertLogicalToVirtualMechanicalTargetLocked(requestedLogicalTarget));
 
                             if (Math.Abs(correctionDelta) > MinimumMoveDegrees)
                             {
@@ -972,11 +1007,13 @@ namespace ASCOM.photonWanderer.Rotator
 
                         if (!requiresCorrection)
                         {
-                            targetPosition = NormalizeAngle(mechanicalPosition + syncOffset);
+                            targetPosition = NormalizeAngle(virtualMechanicalPosition + syncOffset);
                             isMoving = false;
                             ResetActiveMoveEstimateLocked();
                         }
                     }
+
+                    PersistVirtualMechanicalPosition(VirtualMechanicalPosition);
 
                     if (requiresCorrection)
                     {
@@ -997,7 +1034,7 @@ namespace ASCOM.photonWanderer.Rotator
 
                     LogMessage(
                         "MoveComplete",
-                        $"Move finished. Rotated {moveCompletion.ReportedDeltaDegrees} degrees, mechanical position {moveCompletion.MechanicalDegrees}, logical target requested {requestedLogicalTarget}.");
+                        $"Move finished. Rotated {moveCompletion.ReportedDeltaDegrees} degrees, firmware mechanical {moveCompletion.MechanicalDegrees}, virtual mechanical {VirtualMechanicalPosition}, logical target requested {requestedLogicalTarget}.");
                     break;
                 }
             }
@@ -1011,7 +1048,7 @@ namespace ASCOM.photonWanderer.Rotator
                 {
                     UpdateEstimatedMotionStateLocked();
                     isMoving = false;
-                    targetPosition = NormalizeAngle(mechanicalPosition + syncOffset);
+                    targetPosition = NormalizeAngle(virtualMechanicalPosition + syncOffset);
                     ResetActiveMoveEstimateLocked();
                 }
 
@@ -1052,7 +1089,7 @@ namespace ASCOM.photonWanderer.Rotator
 
                 UpdateEstimatedMotionStateLocked();
                 isMoving = false;
-                targetPosition = NormalizeAngle(mechanicalPosition + syncOffset);
+                targetPosition = NormalizeAngle(virtualMechanicalPosition + syncOffset);
                 ResetActiveMoveEstimateLocked();
             }
 
@@ -1301,7 +1338,8 @@ namespace ASCOM.photonWanderer.Rotator
             double moveDistance = Math.Abs(activeMoveSignedDegrees);
             if (moveDistance < MinimumMoveDegrees)
             {
-                mechanicalPosition = activeMoveTargetMechanicalPosition;
+                virtualMechanicalPosition = activeMoveTargetVirtualMechanicalPosition;
+                firmwareMechanicalPosition = activeMoveTargetFirmwareMechanicalPosition;
                 return;
             }
 
@@ -1311,14 +1349,18 @@ namespace ASCOM.photonWanderer.Rotator
             double progress = estimatedDurationSeconds <= 0.0 ? 1.0 : elapsedSeconds / estimatedDurationSeconds;
             progress = Math.Max(0.0, Math.Min(progress, 1.0));
 
-            mechanicalPosition = NormalizeAngle(activeMoveStartMechanicalPosition + (activeMoveSignedDegrees * progress));
+            virtualMechanicalPosition = NormalizeAngle(activeMoveStartVirtualMechanicalPosition + (activeMoveSignedDegrees * progress));
+            firmwareMechanicalPosition = NormalizeAngle(activeMoveStartFirmwareMechanicalPosition + (activeMoveSignedDegrees * progress));
 
             if (progress >= 1.0 && waitingForCompletionFrame && elapsedSeconds >= estimatedDurationSeconds + MoveCompletionGracePeriod.TotalSeconds)
             {
                 isMoving = false;
                 waitingForCompletionFrame = false;
-                targetPosition = NormalizeAngle(mechanicalPosition + syncOffset);
-                LogMessage("MoveComplete", "No completion frame received after the estimated move duration; finalizing move from local state.");
+                virtualMechanicalPosition = activeMoveTargetVirtualMechanicalPosition;
+                firmwareMechanicalPosition = activeMoveTargetFirmwareMechanicalPosition;
+                targetPosition = NormalizeAngle(virtualMechanicalPosition + syncOffset);
+                PersistVirtualMechanicalPosition(virtualMechanicalPosition);
+                LogMessage("MoveComplete", $"No completion frame received after the estimated move duration; finalizing move from local state. Firmware mechanical {firmwareMechanicalPosition.ToString(CultureInfo.InvariantCulture)}, virtual mechanical {virtualMechanicalPosition.ToString(CultureInfo.InvariantCulture)}.");
             }
         }
 
@@ -1344,8 +1386,10 @@ namespace ASCOM.photonWanderer.Rotator
         private static void ResetActiveMoveEstimateLocked()
         {
             activeMoveSignedDegrees = 0.0f;
-            activeMoveStartMechanicalPosition = mechanicalPosition;
-            activeMoveTargetMechanicalPosition = mechanicalPosition;
+            activeMoveStartVirtualMechanicalPosition = virtualMechanicalPosition;
+            activeMoveStartFirmwareMechanicalPosition = firmwareMechanicalPosition;
+            activeMoveTargetVirtualMechanicalPosition = virtualMechanicalPosition;
+            activeMoveTargetFirmwareMechanicalPosition = firmwareMechanicalPosition;
             activeMoveStartUtc = DateTime.UtcNow;
             waitingForCompletionFrame = false;
         }
@@ -1354,11 +1398,31 @@ namespace ASCOM.photonWanderer.Rotator
         {
             targetPosition = logicalTarget;
             isMoving = true;
-            activeMoveStartMechanicalPosition = mechanicalPosition;
+            activeMoveStartVirtualMechanicalPosition = virtualMechanicalPosition;
+            activeMoveStartFirmwareMechanicalPosition = firmwareMechanicalPosition;
             activeMoveSignedDegrees = logicalDeltaDegrees;
-            activeMoveTargetMechanicalPosition = NormalizeAngle(mechanicalPosition + logicalDeltaDegrees);
+            activeMoveTargetVirtualMechanicalPosition = NormalizeAngle(virtualMechanicalPosition + logicalDeltaDegrees);
+            activeMoveTargetFirmwareMechanicalPosition = NormalizeAngle(firmwareMechanicalPosition + logicalDeltaDegrees);
             activeMoveStartUtc = DateTime.UtcNow;
             waitingForCompletionFrame = true;
+        }
+
+        private static float ConvertLogicalToVirtualMechanicalTargetLocked(float logicalTarget)
+        {
+            return NormalizeAngle(logicalTarget - syncOffset);
+        }
+
+        private static float ComputeCableSafeDeltaLocked(float targetVirtualMechanicalPosition)
+        {
+            float virtualToFirmwareOffset = virtualMechanicalPosition - firmwareMechanicalPosition;
+            float targetFirmwareMechanicalPosition = NormalizeAngle(targetVirtualMechanicalPosition - virtualToFirmwareOffset);
+            float cableSafeDelta = targetFirmwareMechanicalPosition - firmwareMechanicalPosition;
+
+            LogMessage(
+                "CableSafeDelta",
+                $"Current firmware mechanical {firmwareMechanicalPosition.ToString(CultureInfo.InvariantCulture)}, current virtual mechanical {virtualMechanicalPosition.ToString(CultureInfo.InvariantCulture)}, target virtual mechanical {targetVirtualMechanicalPosition.ToString(CultureInfo.InvariantCulture)}, target firmware mechanical {targetFirmwareMechanicalPosition.ToString(CultureInfo.InvariantCulture)}, cable-safe delta {cableSafeDelta.ToString(CultureInfo.InvariantCulture)}.");
+
+            return cableSafeDelta;
         }
 
         private static string NormalizeResponse(string response)
@@ -1386,22 +1450,6 @@ namespace ASCOM.photonWanderer.Rotator
             }
 
             return (float)normalizedAngle;
-        }
-
-        private static float ComputeDirectedDelta(float fromAngle, float toAngle, float directionReference)
-        {
-            float delta = toAngle - fromAngle;
-
-            if (directionReference >= 0.0f && delta < 0.0f)
-            {
-                delta += 360.0f;
-            }
-            else if (directionReference < 0.0f && delta > 0.0f)
-            {
-                delta -= 360.0f;
-            }
-
-            return delta;
         }
 
         private static float AbsoluteAngularDifference(float firstAngle, float secondAngle)
